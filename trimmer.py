@@ -2,7 +2,7 @@ import hexchat
 
 __module_name__ = "trimmer"
 __module_author__ = "Mika Wu"
-__module_version__ = "0.1.0.150605"
+__module_version__ = "0.1.1.150605"
 # Hexchat Python 2 API crashes calling any emit_print() functions.
 # Python 3 API does not, so we have to use it.
 __module_description__ = "Trims nicknames to length. REQUIRES PYTHON 3 PLUGIN."
