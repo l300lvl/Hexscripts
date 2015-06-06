@@ -1,7 +1,7 @@
 # Hexscripts
 Miscellaneous Hexchat scripts I've found some need for or felt like updating.
 ###Trimmer
-######Requires Python 3 plugin - select during installation
+######If you want to use the "tabxhider" script alongside this, you **must** install the Python 3 plugin during installation. Using both with the Python 2 plugin will cause a crash.
 Shortens extremely long usernames. Yes, I'm looking at you, "aaaaaaaaAAAAAaaaaaaa".
 
 Custom cut-off length, optional "cap" character.
