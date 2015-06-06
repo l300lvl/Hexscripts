@@ -7,3 +7,8 @@ Shortens extremely long usernames. Yes, I'm looking at you, "aaaaaaaaAAAAAaaaaaa
 Custom cut-off length, optional "cap" character.
 
 ![alt text](demo/trim.PNG "10 cut w/ ~ cap")
+
+###TabXHider
+######Updated to work with both Python 2 and 3 plugin. There are incompatibilities, see: Trimmer for details.
+Removes the ugly "Close tab" button from the channel tab view.
+![alt text](demo/noX.PNG "Removes tab close button")
