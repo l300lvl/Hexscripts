@@ -2,15 +2,15 @@ import hexchat
 
 __module_name__ = "trimmer"
 __module_author__ = "Mika Wu"
-__module_version__ = "0.1.0.150605"
+__module_version__ = "0.2.0.150606"
 # Hexchat Python 2 API crashes calling any emit_print() functions.
 # Python 3 API does not, so we have to use it.
-__module_description__ = "Trims nicknames to length. REQUIRES PYTHON 3 PLUGIN."
+__module_description__ = "Trims nicknames to length."
 
 # Set to truncation level in characters.
 # Note that, if using a non-monospace font,
 # not all nicks will be of the same length.
-TRIM = 10
+TRIM_TO = 11
 
 # Optionally remove one extra character from the end of the nickname and
 # replace it with the specified character to signify trimmed state.
@@ -19,8 +19,12 @@ TRIM = 10
 # Set to 1 to enable
 # Set to 0 to disable
 REPLACE_TRIM = 1
-SIGN = "~"
+SIGN = "."
 
+# Emitting same command as hook receives creates infinite loop.
+# So, we must have a variable to signal to "stop" processing
+# a particular event for a short time.
+trimmed = False
 
 def trim_cb(word, word_eol, userdata):
 	"""Print user message with an abbreviated username
@@ -39,15 +43,23 @@ def trim_cb(word, word_eol, userdata):
 
 	See HEXCHAT documentation for futher information.
 	"""
-	global TRIM, REPLACE_TRIM, SIGN
+	global TRIM_TO, REPLACE_TRIM, SIGN, trimmed
+
+	if trimmed:
+		return
 
 	nick = word[0]
 	nick = hexchat.strip(nick, -1, 3)
 
-	if len(nick) > TRIM:
-		nick_trim = nick[0:TRIM - REPLACE_TRIM] + REPLACE_TRIM * SIGN
+	if len(nick) > TRIM_TO:
+		# We're about to emit print so we set our signal variable to True.
+		# When the emit triggers the hook, the function returns immediately.
+		trimmed = True
+		nick_trim = nick[0:TRIM_TO - REPLACE_TRIM] + REPLACE_TRIM * SIGN
 		# print("emit_print({}, {}, {})".format(userdata, nick_trim, word[1]))
 		hexchat.emit_print(userdata, nick_trim, word[1])
+		# Now we set the signal back to False so we can process incoming events.
+		trimmed = False
 		return hexchat.EAT_ALL
 
 
