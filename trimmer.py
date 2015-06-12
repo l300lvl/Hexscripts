@@ -1,6 +1,6 @@
 import hexchat
 
-__module_name__ = "trimmer"
+__module_name__ = "trimmer.py"
 __module_author__ = "Mika Wu"
 __module_version__ = "0.2.0.150606"
 __module_description__ = "Trims nicknames to length."
