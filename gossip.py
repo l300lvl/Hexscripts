@@ -8,14 +8,18 @@ import hexchat
 
 __module_name__ = "gossip.py"
 __module_author__ = "Mika Wu"
-__module_version__ = "0.1.0.150611"
+__module_version__ = "0.2.1.150613"
 __module_description__ = "Stores highlights/pms for future reading."
 
 # Folder created in plugins directory to store mentions and config
 LOGS_PATH = "hlogs/"
 
-CONFIG = None
+MENTION_STORE = 1
+PM_STORE = 0
 
+# Stores list of updated users/channels
+CH_UPDATES = []
+PM_UPDATES = []
 
 def encode(channel):
 	"""Encodes a channel name to urlsafe base64 to always obtain valid
@@ -134,15 +138,29 @@ def mention_cb(word, word_eol, userdata):
 
 	See HEXCHAT documentation for futher information.
 	"""
-	store(hexchat.get_info("channel"), "<" + word[0] + "> " + word[1])
+	global CH_UPDATES, PM_UPDATES
+	if userdata == "hilight" and MENTION_STORE:
+		channel = hexchat.get_info("channel")
+		if channel not in CH_UPDATES:
+			CH_UPDATES.append(channel)
+			hexchat.set_pluginpref("gossip_ch_up", CH_UPDATES)
+		store(channel, "<" + word[0] + "> " + word[1])
+	elif userdata == "pm" and PM_STORE:
+		user = word[0]
+		if user not in PM_UPDATES:
+			PM_UPDATES.append(user)
+			hexchat.set_pluginpref("gossip_pm_up", PM_UPDATES)
+		store(user, "<" + user + "> " + word[1])
 	return hexchat.EAT_NONE
 
 
 def usage():
 	print("""Usage:
+				/gossip new .. lists awaiting notifications (from X user, Y channel, etc.)
 				/gossip read | r .. check new (unread) mentions
 				/gossip readnoclear | rnc .. view new mentions; don't mark as read
 				/gossip readall | ra .. view all stored mentions for current channel
+				/gossip pms [r|ra|rnc|del] [user] .. read or delete pms stored from user
 				/gossip delete | del .. deletes all mentions for the current channel
 				/gossip toggle [mentions|pms|all] .. toggle storage of argument
 				/gossip help | ? | --help .. see this message""")
@@ -163,52 +181,94 @@ def get_cb(word, word_eol, userdata):
 
 	See HEXCHAT documentation for futher information.
 	"""
-	global MENTION_STORE, PM_STORE
-	word = word.lower()
+	global MENTION_STORE, PM_STORE, CH_UPDATES, PM_UPDATES
+
+	for w in word:
+		w = w.lower()
+
 	if len(word) < 2:
 		usage()
+		return hexchat.EAT_HEXCHAT
 	elif word[1] in ["reload", "rl"]:
 		print("Restart HexChat to reload. Do *not* use /py reload.")
+	elif word[1] in ["new"]:
+		print("New mentions in channels: " + ", ".join(CH_UPDATES))
+		print("New PMs from: " + ", ".join(PM_UPDATES))
 	elif word[1] in ["read", "r"]:
 		flag_mentions(hexchat.get_info("channel"), "ru")
+		if hexchat.get_info("channel") in CH_UPDATES:
+			CH_UPDATES.remove(hexchat.get_info("channel"))
 	elif word[1] in ["readall", "ra"]:
 		flag_mentions(hexchat.get_info("channel"), "ra")
+		if hexchat.get_info("channel") in CH_UPDATES:
+			CH_UPDATES.remove(hexchat.get_info("channel"))
 	elif word[1] in ["readnoclear", "rnc"]:
 		flag_mentions(hexchat.get_info("channel"), "r")
+		if hexchat.get_info("channel") in CH_UPDATES:
+			CH_UPDATES.remove(hexchat.get_info("channel"))
+	elif word[1] in ["pms"]:
+		if len(word) < 4:
+			usage()
+			return hexchat.EAT_HEXCHAT
+		elif word[2] in ["read", "r"]:
+			flag_mentions(word[3], "ru")
+		elif word[2] in ["readall", "ra"]:
+			flag_mentions(word[3], "ra")
+		elif word[2] in ["readnoclear", "rnc"]:
+			flag_mentions(word[3], "r")
+		elif word[2] in ["delete", "del"]:
+			flag_mentions(word[3], "d")
+		# Something is being read, so we remove from awaiting notifications
+		if word[3] in PM_UPDATES:
+			PM_UPDATES.remove(word[3])
 	elif word[1] in ["delete", "del"]:
 		flag_mentions(hexchat.get_info("channel"), "d")
+		if hexchat.get_info("channel") in CH_UPDATES:
+			CH_UPDATES.remove(hexchat.get_info("channel"))
 	elif word[1] in ["toggle"]:
+		if len(word) < 3:
+			usage()
+			return hexchat.EAT_HEXCHAT
 		if word[2] in ["mentions", "all"]:
-			CONFIG["mentions"] = 1 - CONFIG["mentions"]
-			print("Mention logging is now " + ("on" if CONFIG["mentions"] == 1 else "off"))
+			MENTION_STORE = 1 - MENTION_STORE
+			hexchat.set_pluginpref("gossip_mentions", MENTION_STORE)
+			print("Mention logging is now " + ("on" if MENTION_STORE else "off"))
 		if word[2] in ["pms", "all"]:
-			CONFIG["pms"] = 1 - CONFIG["pms"]
-			print("PM logging is now " + ("on" if CONFIG["pms"] == 1 else "off"))
-	else:
-		usage()
+			PM_STORE = 1 - PM_STORE
+			hexchat.set_pluginpref("gossip_pms", PM_STORE)
+			print("PM logging is now " + ("on" if PM_STORE else "off"))
 
 	return hexchat.EAT_HEXCHAT
 
 
 def main():
-	global LOGS_PATH, CONFIG
-	try:
-		print(__module_name__, __module_version__, "has been loaded.")
+	global LOGS_PATH, MENTION_STORE, PM_STORE
 
-		if not os.path.exists("hlogs"):
-			os.makedirs("hlogs")
-		try:
-			with open(LOGS_PATH + "config.json") as cfgfile:
-				CONFIG = json.load(cfgfile)
-		except IOError:
-			CONFIG = {"mentions": 1, "pms": 0}
+	print(__module_name__, __module_version__, "has been loaded.")
 
-		hexchat.hook_command("gossip", get_cb)
-		hexchat.hook_print("Channel Msg Hilight", mention_cb)
-		hexchat.hook_print("Private Message to Dialog", mention_cb)
-	finally:
-		with open(LOGS_PATH + "config.json", "w") as cfgfile:
-			json.dump(CONFIG, cfgfile)
+	# Now "pull" from config
+	MENTION_STORE = hexchat.get_pluginpref("gossip_mentions")
+	PM_STORE = hexchat.get_pluginpref("gossip_pms")
+	CH_UPDATES = hexchat.get_pluginpref("gossip_ch_up")
+	PM_UPDATES = hexchat.get_pluginpref("gossip_pm_up")
+
+	# If values are missing (first run), set defaults
+	if MENTION_STORE is None:
+		MENTION_STORE = 1
+		hexchat.set_pluginpref("gossip_mentions", 1)
+	if PM_STORE is None:
+		PM_STORE = 0
+		hexchat.set_pluginpref("gossip_pms", 0)
+	if CH_UPDATES is None:
+		CH_UPDATES = []
+		hexchat.set_pluginpref("gossip_ch_up", [])
+	if PM_UPDATES is None:
+		PM_UPDATES = []
+		hexchat.set_pluginpref("gossip_pm_up", [])
+
+	hexchat.hook_command("gossip", get_cb)
+	hexchat.hook_print("Channel Msg Hilight", mention_cb, "hilight")
+	hexchat.hook_print("Private Message to Dialog", mention_cb, "pm")
 
 if __name__ == "__main__":
 	main()
