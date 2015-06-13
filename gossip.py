@@ -1,23 +1,21 @@
 #!python3
 import ast
-from datetime import datetime
-import os
 import base64
+from datetime import datetime
+import json
+import os
 import hexchat
 
 __module_name__ = "gossip.py"
 __module_author__ = "Mika Wu"
 __module_version__ = "0.1.0.150611"
-__module_description__ = "Stores highlights in a file for future reading."
+__module_description__ = "Stores highlights/pms for future reading."
 
-# Folder created in plugins directory to store mentions
+# Folder created in plugins directory to store mentions and config
 LOGS_PATH = "hlogs/"
 
-# Enable/Disable mention storage
-MENTION_STORE = True
+CONFIG = None
 
-# Enable/Disable PM storage
-# PM_STORE = False
 
 def encode(channel):
 	"""Encodes a channel name to urlsafe base64 to always obtain valid
@@ -46,8 +44,6 @@ def store(channel, mention):
 	"""
 	global LOGS_PATH
 
-	if not os.path.exists("hlogs"):
-		os.makedirs("hlogs")
 	with open(LOGS_PATH + encode(channel), "a") as highlights:
 		store = [date_conv(datetime.now()), channel, mention, 0]
 		highlights.write(str(store) + "\n")
@@ -87,9 +83,6 @@ def flag_mentions(channel, flag, older_than = None):
 	else:
 		# Otherwise convert to datetime object
 		older_than = date_conv(older_than)
-
-	if not os.path.exists("hlogs"):
-		os.makedirs("hlogs")
 
 	with open(LOGS_PATH + encode(channel), "a+") as highlights:
 		highlights.seek(0)
@@ -151,6 +144,7 @@ def usage():
 				/gossip readnoclear | rnc .. view new mentions; don't mark as read
 				/gossip readall | ra .. view all stored mentions for current channel
 				/gossip delete | del .. deletes all mentions for the current channel
+				/gossip toggle [mentions|pms|all] .. toggle storage of argument
 				/gossip help | ? | --help .. see this message""")
 
 
@@ -169,6 +163,8 @@ def get_cb(word, word_eol, userdata):
 
 	See HEXCHAT documentation for futher information.
 	"""
+	global MENTION_STORE, PM_STORE
+	word = word.lower()
 	if len(word) < 2:
 		usage()
 	elif word[1] in ["reload", "rl"]:
@@ -181,16 +177,38 @@ def get_cb(word, word_eol, userdata):
 		flag_mentions(hexchat.get_info("channel"), "r")
 	elif word[1] in ["delete", "del"]:
 		flag_mentions(hexchat.get_info("channel"), "d")
+	elif word[1] in ["toggle"]:
+		if word[2] in ["mentions", "all"]:
+			CONFIG["mentions"] = 1 - CONFIG["mentions"]
+			print("Mention logging is now " + ("on" if CONFIG["mentions"] == 1 else "off"))
+		if word[2] in ["pms", "all"]:
+			CONFIG["pms"] = 1 - CONFIG["pms"]
+			print("PM logging is now " + ("on" if CONFIG["pms"] == 1 else "off"))
 	else:
 		usage()
 
 	return hexchat.EAT_HEXCHAT
 
-print(__module_name__, __module_version__, "has been loaded.")
 
-hexchat.hook_command("gossip", get_cb)
-if (MENTION_STORE):
-	hexchat.hook_print("Channel Msg Hilight", mention_cb)
+def main():
+	global LOGS_PATH, CONFIG
+	try:
+		print(__module_name__, __module_version__, "has been loaded.")
 
-#if (PM_STORE):
-#	hexchat.hook_print("Private Message to Dialog", mention_cb)
+		if not os.path.exists("hlogs"):
+			os.makedirs("hlogs")
+		try:
+			with open(LOGS_PATH + "config.json") as cfgfile:
+				CONFIG = json.load(cfgfile)
+		except IOError:
+			CONFIG = {"mentions": 1, "pms": 0}
+
+		hexchat.hook_command("gossip", get_cb)
+		hexchat.hook_print("Channel Msg Hilight", mention_cb)
+		hexchat.hook_print("Private Message to Dialog", mention_cb)
+	finally:
+		with open(LOGS_PATH + "config.json", "w") as cfgfile:
+			json.dump(CONFIG, cfgfile)
+
+if __name__ == "__main__":
+	main()
