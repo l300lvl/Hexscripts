@@ -1,6 +1,6 @@
 #!python3
 import ast
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import base64
 #import hexchat
@@ -20,6 +20,17 @@ def encode(channel):
 	"""
 	return str(base64.urlsafe_b64encode(channel.encode("ascii")))
 
+def date_conv(date):
+	"""If passed a date string return datetime object for date;
+	if passed a datetime object return a date string for it.
+
+	Args:
+		date: string format Y-m-d-H-M-S
+	"""
+	if type(date) == str:
+		return datetime.strptime(date, "%Y-%m-%d-%H-%M-%S")
+	else:
+		return date.strftime("%Y-%m-%d-%H-%M-%S")
 
 def store(channel, mention):
 	"""Appends passed message to highlights text file, or creates
@@ -29,29 +40,26 @@ def store(channel, mention):
 
 	if not os.path.exists("hlogs"):
 		os.makedirs("hlogs")
-	with open(LOGS_PATH + encode(channel) + ".txt", "a") as highlights:
-		store = (datetime.now().strftime("%Y-%m-%d"),
-				 datetime.now().strftime("%H:%M"), channel, mention)
+	with open(LOGS_PATH + encode(channel), "a") as highlights:
+		store = [date_conv(datetime.now()), channel, mention, 0]
 		highlights.write(str(store) + "\n")
-
-
-def get_mentions(channel, since = "unread"):
-	"""Print some/all stored mentions for a channel by date."""
-	global LOGS_PATH
-
-	with open(LOGS_PATH + encode(channel) + ".txt", "r") as highlights:
-		for line in highlights:
-			print(line, end="")
 
 
 def flag_mentions(channel, flag, older_than = None):
 	"""Flag some/all stored mentions for a channel by date.
 
 	Args:
-		flag: For deletion or read/unread.
-		older_than: Flags all messages from before this cutoff date given
-					in ISO format (YYYY-MM-DD). If not specified, flags all
-					messages from before the current date.
+		flag: For deletion (d), read (r), read and update (ru), read-all (ra)
+				d: deletes messages
+				r: print out all messages marked as unread
+				ru: print out unread messages and mark as read
+				ra: print out all messages, regardless of read/unread status
+
+		older_than: Only affect messages from before this cutoff date.
+					e.g.
+						only delete messages older than YY/MM/DD
+						only mark messages older than YY/MM/DD as read
+					If not given, uses the current datetime (affects all).
 
 	As a side note, while I don't expect the number of lines to exceed a
 	couple hundred, reading line-by-line and writing to a separate file
@@ -64,17 +72,30 @@ def flag_mentions(channel, flag, older_than = None):
 	global LOGS_PATH
 
 	if older_than == None:
-		older_than = datetime.now().strftime("%Y-%m-%d")
+		# Set to NOW
+		older_than = datetime.now()
+	else:
+		# Otherwise convert to datetime object
+		older_than = date_conv(older_than)
 
-	with open(LOGS_PATH + encode(channel) + ".txt", "r") as highlights:
-		with open(LOGS_PATH + "buffer.txt", "w") as output:
+	with open(LOGS_PATH + encode(channel), "r") as highlights:
+		with open(LOGS_PATH + "buffer", "w") as output:
 			for line in highlights:
 				mention_date = ast.literal_eval(line)
-				# If the current line is from our cutoff date or newer
-				# then we write it to our new file
-				if (datetime.strptime(mention_date[0], "%Y-%m-%d") >=
-					datetime.strptime(older_than, "%Y-%m-%d")):
+				# If the current line is more recent than the cutoff date,
+				# we do something to it based on flag:
+				# 	deletion: gets written to buffer file to be preserved
+				#	ru: changes last tuple value from 0 to 1 for read
+				if (date_conv(mention_date[0]) < older_than):
+					if flag != "d":
+						if ((flag == "ra") or 
+							(flag != "ra" and mention_date[3] == 0)):
+							print(mention_date[2])
+						if flag == "ru":
+							mention_date[3] = 1
+						output.write(str(mention_date) + "\n")
+				else:
 					output.write(line)
 
-	os.remove(LOGS_PATH + encode(channel) + ".txt")
-	os.rename(LOGS_PATH + "buffer.txt", LOGS_PATH + encode(channel) + ".txt")
+	os.remove(LOGS_PATH + encode(channel))
+	os.rename(LOGS_PATH + "buffer", LOGS_PATH + encode(channel))
